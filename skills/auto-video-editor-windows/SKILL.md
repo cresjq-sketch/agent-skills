@@ -5,7 +5,7 @@ description: Use when a Windows user points to a local video and wants it edited
 
 # Auto video editor for Windows
 
-Use local HotClip and FFmpeg to create reviewable video edits on Windows. The shareable installer detects common agent environments and installs this standard `SKILL.md` into detected skill directories. It installs Git, Node.js LTS, FFmpeg, HotClip and HotClip's speech model. Requirements: Windows 10 or later, winget, internet access, and several GB of free disk space. Restart the agent after installation.
+Use local HotClip and FFmpeg to create reviewable video edits on Windows. Install this standard Agent Skill into the current agent with that agent's native skill installer. Requirements for video editing: Windows 10 or later, internet access, and several GB of free disk space. When the user asks to run this skill on Windows, the active agent installs Git, Node.js LTS, FFmpeg, HotClip and HotClip's speech model using the available Windows package manager. No repository bootstrap script or Ollama is required. Restart the agent after installation if needed.
 
 ## Workflow
 
@@ -21,7 +21,7 @@ Use local HotClip and FFmpeg to create reviewable video edits on Windows. The sh
 
 ## Commands
 
-The installer places HotClip in `%LOCALAPPDATA%\HotClip\app`. In PowerShell:
+When HotClip is installed, it is placed in `%LOCALAPPDATA%\HotClip\app`. In PowerShell:
 
 ```powershell
 Set-Location "$env:LOCALAPPDATA\HotClip\app"
