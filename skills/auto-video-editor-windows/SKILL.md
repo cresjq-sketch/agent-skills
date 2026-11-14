@@ -1,11 +1,11 @@
 ---
 name: auto-video-editor-windows
-description: Use when a Windows user points to a local video and wants it edited, cleaned, transcribed, or cut into livestream highlights.
+description: Use when a macOS or Windows user points to a local video and wants it edited, cleaned, transcribed, subtitled, or cut into livestream highlights.
 ---
 
-# Auto video editor for Windows
+# Auto video editor for macOS and Windows
 
-Use local HotClip and FFmpeg to create reviewable video edits on Windows. Install this standard Agent Skill into the current agent with that agent's native skill installer. Requirements for video editing: Windows 10 or later, internet access, and several GB of free disk space. When the user asks to run this skill on Windows, the active agent installs Git, Node.js LTS, FFmpeg, HotClip and HotClip's speech model using the available Windows package manager. No repository bootstrap script or Ollama is required. Restart the agent after installation if needed.
+Use local HotClip and FFmpeg to create reviewable video edits on macOS or Windows. Install this standard Agent Skill into the current agent with that agent's native skill installer. Requirements: macOS or Windows 10+, internet access, and several GB of free disk space. When preparing to edit, install Git, Node.js LTS, FFmpeg, HotClip and HotClip's local speech model with the operating system's package manager, then use the HotClip CLI. On macOS, Homebrew is the usual package manager; on Windows, use winget. No repository PowerShell bootstrap, Ollama, or LLM endpoint is required for transcript-led selection. Restart the agent after installing the skill if needed.
 
 ## Workflow
 
@@ -22,11 +22,34 @@ Use local HotClip and FFmpeg to create reviewable video edits on Windows. Instal
 
 ## Commands
 
-When HotClip is installed, it is placed in `%LOCALAPPDATA%\HotClip\app`. In PowerShell:
+## Platform setup and commands
+
+Use the repository CLI on either platform. Install Git, Node.js LTS, FFmpeg, and pnpm first; clone HotClip from `https://github.com/xixihhhh/hotclip` into a stable user directory and run `pnpm install` there. HotClip's first local transcription downloads its speech model. Do not set LLM environment variables for this transcript-led workflow.
+
+macOS (zsh), after installing Homebrew if needed:
+
+```sh
+brew install git node ffmpeg
+corepack enable
+corepack prepare pnpm@latest --activate
+mkdir -p "$HOME/Library/Application Support/HotClip"
+git clone --depth 1 https://github.com/xixihhhh/hotclip.git "$HOME/Library/Application Support/HotClip/source"
+cd "$HOME/Library/Application Support/HotClip/source"
+pnpm install
+pnpm cli transcribe "$HOME/Movies/recording.mp4" --json > "$HOME/Movies/transcript.json"
+```
+
+Windows PowerShell, from the HotClip source directory after installing Git, Node.js LTS, and FFmpeg with winget:
 
 ```powershell
+corepack enable
+corepack prepare pnpm@latest --activate
+git clone --depth 1 https://github.com/xixihhhh/hotclip.git "$env:LOCALAPPDATA\HotClip\app"
 Set-Location "$env:LOCALAPPDATA\HotClip\app"
+pnpm install
 pnpm cli transcribe 'C:\Videos\recording.mp4' --json > 'C:\Videos\transcript.json'
 ```
+
+The official HotClip macOS DMG is currently for Apple Silicon. The app is not Apple-notarized; use the official installation guide if Gatekeeper blocks it. The CLI source workflow above is separate from that GUI download. Check the current HotClip release and installation guide for Intel Mac compatibility before installing there.
 
 Transcription runs locally. Choose a count within the duration-based ceilings according to distinct, self-contained moments in the transcript; never fill the maximum just because it exists. Always render spoken captions and a matching SRT unless the user asks to omit them. Remove only individually verified filler-word spans, then retime subtitle cues to the output timeline. Render only after checking transcript boundaries and audio safety.

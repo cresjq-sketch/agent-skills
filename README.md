@@ -6,7 +6,7 @@
 
 | 技能 | 技能目录 | 发给智能体的安装说明 |
 |---|---|---|
-| `auto-video-editor-windows` | [`skills/auto-video-editor-windows`](skills/auto-video-editor-windows) | [`install-auto-video-editor-windows.md`](install-auto-video-editor-windows.md) |
+| `auto-video-editor-windows` | [`skills/auto-video-editor-windows`](skills/auto-video-editor-windows) | [`install-auto-video-editor.md`](install-auto-video-editor.md) |
 | `zhenmei-mobile` | [`skills/zhenmei-mobile`](skills/zhenmei-mobile) | [`install-zhenmei-mobile.md`](install-zhenmei-mobile.md) |
 
 每份 `install-<技能名>.md` 都只针对一个技能。把对应文件的内容或 GitHub 链接发给智能体即可；智能体按说明使用当前平台的技能安装方式，只安装所选目录。
