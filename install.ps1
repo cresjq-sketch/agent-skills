@@ -1,16 +1,18 @@
 [CmdletBinding()]
-param()
+param(
+  [string[]]$Skills
+)
 $ErrorActionPreference = 'Stop'
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = [Security.Principal.WindowsPrincipal]::new($identity)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-  $launchArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"' + $PSCommandPath + '"'))
-  Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $launchArgs
-  exit
-}
-$skillName = 'auto-video-editor-windows'
-$skillTargets = [System.Collections.Generic.List[string]]::new()
+$repoSkills = Join-Path $PSScriptRoot 'skills'
+if (-not (Test-Path $repoSkills)) { throw "Skills directory not found: $repoSkills" }
+$availableSkills = @(Get-ChildItem -Path $repoSkills -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'SKILL.md') } | Select-Object -ExpandProperty Name)
+if ($availableSkills.Count -eq 0) { throw "No skills with SKILL.md found under $repoSkills" }
+if (-not $Skills -or $Skills.Count -eq 0) { $Skills = $availableSkills }
+$unknownSkills = @($Skills | Where-Object { $_ -notin $availableSkills })
+if ($unknownSkills.Count -gt 0) { throw "Unknown skill(s): $($unknownSkills -join ', '). Available: $($availableSkills -join ', ')" }
+
 $userProfilePath = $env:USERPROFILE
+$skillTargets = [System.Collections.Generic.List[string]]::new()
 $detectors = @(
   @{ Path = (Join-Path $userProfilePath '.codex'); Command = 'codex'; Skills = (Join-Path $userProfilePath '.codex\skills') },
   @{ Path = (Join-Path $userProfilePath '.claude'); Command = 'claude'; Skills = (Join-Path $userProfilePath '.claude\skills') },
@@ -25,55 +27,54 @@ foreach ($agent in $detectors) {
 }
 $commonSkills = Join-Path $userProfilePath '.agents\skills'
 if (-not $skillTargets.Contains($commonSkills)) { $skillTargets.Add($commonSkills) }
-$hotclipDir = Join-Path $env:LOCALAPPDATA 'HotClip\app'
 
-function Require-Winget {
-  if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-    throw 'Windows Package Manager (winget) is required. Install/update App Installer from Microsoft Store, then rerun this script.'
+foreach ($skill in $Skills) {
+  $source = Join-Path $repoSkills $skill
+  foreach ($target in $skillTargets) {
+    New-Item -ItemType Directory -Force -Path $target | Out-Null
+    Copy-Item $source (Join-Path $target $skill) -Recurse -Force
   }
 }
-function Install-WingetPackage([string]$Id) {
-  Write-Host "Installing $Id ..."
-  winget install --id $Id --exact --source winget --accept-source-agreements --accept-package-agreements --silent
-  if ($LASTEXITCODE -ne 0) { throw "winget failed installing $Id (exit $LASTEXITCODE). Fix the reported issue and rerun; installed packages will be detected by winget." }
+
+if ('auto-video-editor-windows' -in $Skills) {
+  function Require-Winget {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+      throw 'winget is required. Install/update App Installer from Microsoft Store, then rerun this script.'
+    }
+  }
+  function Install-WingetPackage([string]$Id) {
+    Write-Host "Installing $Id ..."
+    winget install --id $Id --exact --source winget --accept-source-agreements --accept-package-agreements --silent
+    if ($LASTEXITCODE -ne 0) { throw "winget failed installing $Id (exit $LASTEXITCODE). Fix the reported issue and rerun installer." }
+  }
+  Require-Winget
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Install-WingetPackage 'Git.Git' }
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Install-WingetPackage 'OpenJS.NodeJS.LTS' }
+  if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { Install-WingetPackage 'Gyan.FFmpeg.Shared' }
+  $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
+  $env:Path += ";$env:ProgramFiles\nodejs;$env:ProgramFiles\Git\cmd;$env:LOCALAPPDATA\Microsoft\WinGet\Links"
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git is not on PATH. Restart PowerShell and rerun installer.' }
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js is not on PATH. Restart PowerShell and rerun installer.' }
+
+  $hotclipDir = Join-Path $env:LOCALAPPDATA 'HotClip\app'
+  New-Item -ItemType Directory -Force -Path (Split-Path $hotclipDir) | Out-Null
+  if (Test-Path $hotclipDir) {
+    git -C $hotclipDir pull --ff-only
+    if ($LASTEXITCODE -ne 0) { throw 'HotClip update failed. Resolve the Git message and rerun installer.' }
+  } else {
+    git clone --depth 1 https://github.com/xixihhhh/hotclip.git $hotclipDir
+    if ($LASTEXITCODE -ne 0) { throw 'Could not download HotClip from its public GitHub repository.' }
+  }
+  Set-Location $hotclipDir
+  corepack enable
+  corepack prepare pnpm@latest --activate
+  pnpm install
+  if ($LASTEXITCODE -ne 0) { throw 'HotClip dependency installation failed.' }
+  pnpm cli doctor --download
+  if ($LASTEXITCODE -ne 0) { Write-Warning 'HotClip installed, but ASR model pre-download failed; it will retry at first transcription.' }
+  Write-Host "HotClip installed at: $hotclipDir"
 }
 
-Require-Winget
-New-Item -ItemType Directory -Force -Path $skillTargets,(Split-Path $hotclipDir) | Out-Null
-Install-WingetPackage 'Git.Git'
-Install-WingetPackage 'OpenJS.NodeJS.LTS'
-Install-WingetPackage 'Gyan.FFmpeg.Shared'
-
-# Refresh PATH for this process after winget installs.
-$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
-$env:Path += ";$env:ProgramFiles\nodejs;$env:ProgramFiles\Git\cmd;$env:LOCALAPPDATA\Microsoft\WinGet\Links"
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Git was installed but is not on PATH. Restart PowerShell and rerun install.ps1.' }
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js was installed but is not on PATH. Restart PowerShell and rerun install.ps1.' }
-
-# Install the complete, shareable skill from this bundle.
-$sourceSkill = Join-Path $PSScriptRoot $skillName
-if (-not (Test-Path (Join-Path $sourceSkill 'SKILL.md'))) { throw "Skill folder missing from install bundle: $sourceSkill" }
-foreach ($target in $skillTargets) {
-  New-Item -ItemType Directory -Force -Path $target | Out-Null
-  Copy-Item $sourceSkill (Join-Path $target $skillName) -Recurse -Force
-}
-
-if (Test-Path $hotclipDir) {
-  git -C $hotclipDir pull --ff-only
-  if ($LASTEXITCODE -ne 0) { throw 'HotClip update failed. Resolve the Git message and rerun installer.' }
-} else {
-  git clone --depth 1 https://github.com/xixihhhh/hotclip.git $hotclipDir
-  if ($LASTEXITCODE -ne 0) { throw 'Could not download HotClip from its public GitHub repository.' }
-}
-Set-Location $hotclipDir
-corepack enable
-corepack prepare pnpm@latest --activate
-pnpm install
-if ($LASTEXITCODE -ne 0) { throw 'HotClip dependency installation failed.' }
-
-# Pre-download the local speech model so the first edit does not unexpectedly wait for it.
-pnpm cli doctor --download
-if ($LASTEXITCODE -ne 0) { Write-Warning 'HotClip installed, but its optional ASR model pre-download failed; it will retry on first transcription.' }
-Write-Host "`nInstalled skill in: $($skillTargets -join ', ')"
-Write-Host "HotClip: $hotclipDir"
-Write-Host 'Restart your agent to discover the skill. The local speech model download may take time.'
+Write-Host "Installed skill(s): $($Skills -join ', ')"
+Write-Host "Agent skill directories: $($skillTargets -join ', ')"
+Write-Host 'Restart the agent to load the installed skills.'
